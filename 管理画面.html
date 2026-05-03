@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>in'dex hair Admin v32 - Portfolio Edition</title>
+    <style>
+        :root {
+            --bg-color: #fdfaf9;
+            --accent: #d89689;
+            --assigned: #b56e61;    /* 指名客：茶 */
+            --confirmed: #ff8c00;   /* 確定：オレンジ */
+            --free: #f4d36f;        /* フリー：黄 */
+            --break: #5c85d6;       /* 休憩：青 */
+            --memo: #5cb85c;        /* 練習：緑 */
+            --slot-width: 120px;
+        }
+
+        body { font-family: 'Helvetica Neue', Arial, sans-serif; background-color: var(--bg-color); margin: 0; padding: 10px; color: #444; }
+
+        /* ヘッダー */
+        .admin-header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 15px; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+        #current-time { font-size: 32px; font-weight: bold; font-family: 'Courier New', monospace; color: var(--accent); }
+        .calendar-week { display: flex; gap: 5px; margin-top: 10px; }
+        .day-btn { padding: 8px 12px; border: 1px solid #eee; background: #fff; border-radius: 5px; cursor: pointer; font-size: 12px; transition: 0.2s; }
+        .day-btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+
+        /* 配置ツール */
+        .master-icons { display: flex; gap: 10px; align-items: center; margin-bottom: 15px; background: white; padding: 15px 20px; border-radius: 12px; border: 1px solid #eee; }
+        .master-label { font-size: 13px; font-weight: bold; color: #888; margin-right: 10px; }
+
+        /* タイムライン */
+        .timeline-scroll-container { overflow-x: auto; background: white; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        .timeline-grid { display: grid; grid-template-columns: 160px repeat(12, var(--slot-width)); min-width: 1600px; position: relative; }
+        .time-header-cell { background: #f8f8f8; border-bottom: 1px solid #ddd; padding: 12px 0; text-align: center; font-size: 12px; font-weight: bold; position: sticky; top: 0; z-index: 20; }
+        
+        /* スタッフ名セル（ここをドラッグできるように変更） */
+        .staff-name-cell { 
+            padding: 10px; background: #fff; border-bottom: 1px solid #eee; border-right: 2px solid var(--accent); 
+            font-weight: bold; position: sticky; left: 0; z-index: 15; display: flex; flex-direction: column; align-items: center; justify-content: center;
+            cursor: grab; transition: background 0.2s;
+        }
+        .staff-name-cell:active { cursor: grabbing; }
+        .staff-name-cell.drag-over-staff { border-top: 4px solid var(--accent); background: #fff5f3; }
+
+        .staff-handle { color: #ccc; font-size: 14px; margin-bottom: 4px; }
+        .staff-ops { display: flex; gap: 8px; margin-top: 6px; }
+        .op-btn { background: #f9f9f9; border: 1px solid #eee; cursor: pointer; font-size: 12px; padding: 4px 6px; border-radius: 4px; color: #888; }
+        .op-btn:hover { background: #eee; color: #444; }
+
+        .slots-container { background: #fff; border-bottom: 1px solid #eee; min-height: 100px; grid-column: 2 / span 12; position: relative; transition: background 0.3s; }
+        .slots-container.drag-over { background: #fff9f8; }
+        .slots-container.is-off { background: repeating-linear-gradient(45deg, #fdfdfd, #fdfdfd 10px, #f9f9f9 10px, #f9f9f9 20px); }
+        .off-label { position: absolute; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 20px; color: #ddd; font-weight: bold; pointer-events: none; }
+        
+        /* 予約アイコン */
+        .slot { position: absolute; top: 8px; height: 84px; border-radius: 8px; display: flex; flex-direction: column; justify-content: space-between; font-size: 10px; color: white; font-weight: bold; padding: 8px; box-sizing: border-box; box-shadow: 0 3px 8px rgba(0,0,0,0.12); text-align: left; cursor: grab; transition: transform 0.1s; z-index: 5; }
+        .slot:active { transform: scale(0.98); }
+
+        .slot.assigned { background-color: var(--assigned); }
+        .slot.yellow { background-color: var(--free); color: #444; }
+        .slot.blue { background-color: var(--break); }
+        .slot.green { background-color: var(--memo); }
+
+        /* 確定ルール */
+        .slot.assigned.confirmed, .slot.yellow.confirmed { background-color: var(--confirmed) !important; color: white; }
+        .slot.blue.confirmed { background-color: var(--break) !important; }
+        .slot.green.confirmed { background-color: var(--memo) !important; }
+        .slot.confirmed { cursor: default; box-shadow: none; opacity: 0.85; border: 1px solid rgba(0,0,0,0.1); }
+
+        .slot-tag { font-size: 8px; padding: 2px 5px; border-radius: 4px; background: rgba(0,0,0,0.15); width: fit-content; margin-bottom: 4px; }
+        .slot-time { font-size: 11px; border-bottom: 1px solid rgba(255,255,255,0.3); padding-bottom: 2px; margin-bottom: 4px; }
+        .slot-name { font-size: 13px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+        .slot-menu { font-weight: normal; opacity: 0.9; font-size: 10px; margin-top: 2px; }
+        
+        /* モーダル */
+        .overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 100; backdrop-filter: blur(2px); }
+        .modal { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 25px; border-radius: 16px; width: 340px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+        .modal h3 { margin: 0 0 15px 0; font-size: 18px; text-align: center; color: var(--accent); }
+        input.edit-input, select.edit-input { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 14px; }
+        .btn { border: none; padding: 12px 18px; border-radius: 8px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+        .confirm-toggle { background: #f0f0f0; color: #666; margin-bottom: 15px; width: 100%; border: 2px solid transparent; }
+        .confirm-toggle.active { background: #fff4e6; color: var(--confirmed); border-color: var(--confirmed); }
+    </style>
+</head>
+<body>
+
+<div class="admin-header">
+    <div class="clock-section">
+        <p id="current-date" style="margin:0; font-size:14px; color:#888;">----.--.-- ---</p>
+        <p id="current-time">00:00:00</p>
+        <div class="calendar-week" id="calendar-week"></div>
+    </div>
+    <div style="text-align:right">
+        <h2 style="margin:0; color:var(--accent); letter-spacing: 1px;">in'dex hair ADMIN</h2>
+        <button class="btn" style="background:var(--accent); color:white; margin-top:12px; box-shadow: 0 4px 10px rgba(216,150,137,0.3);" onclick="addStaff()">＋ スタッフ追加</button>
+    </div>
+</div>
+
+<div class="master-icons">
+    <span class="master-label">予約・予定のドラッグ配置:</span>
+    <div class="slot assigned" style="position:static; height:45px; width:100px;" draggable="true" ondragstart="dragMaster(event, 'assigned')"><div class="slot-tag">指名客</div></div>
+    <div class="slot yellow" style="position:static; height:45px; width:100px;" draggable="true" ondragstart="dragMaster(event, 'yellow')"><div class="slot-tag">フリー</div></div>
+    <div class="slot blue" style="position:static; height:45px; width:100px;" draggable="true" ondragstart="dragMaster(event, 'blue')"><div class="slot-tag">休憩</div></div>
+    <div class="slot green" style="position:static; height:45px; width:100px;" draggable="true" ondragstart="dragMaster(event, 'green')"><div class="slot-tag">練習</div></div>
+</div>
+
+<div class="timeline-scroll-container">
+    <div class="timeline-grid" id="timeline-grid"></div>
+</div>
+
+<!-- モーダル -->
+<div class="overlay" id="overlay" onclick="closeModal()">
+    <div class="modal" onclick="event.stopPropagation()">
+        <h3>Reservation Details</h3>
+        <button id="confirm-btn" class="btn confirm-toggle" onclick="toggleConfirm()">✓ 予約を確定（固定）する</button>
+        <select id="edit-type" class="edit-input">
+            <option value="assigned">指名客 (茶)</option>
+            <option value="yellow">フリー客 (黄)</option>
+            <option value="blue">休憩 (青)</option>
+            <option value="green">練習 (緑)</option>
+        </select>
+        <input type="text" id="edit-name" class="edit-input" placeholder="氏名・スタッフ名">
+        <input type="text" id="edit-menu" class="edit-input" placeholder="メニュー / 備考コメント">
+        <div style="display:flex; gap:10px; margin-top:10px;">
+            <button class="btn" style="flex:2; background:#5cb85c; color:white;" onclick="applyChanges()">内容を保存</button>
+            <button class="btn" style="flex:1; background:#fff; color:red; border:1px solid red;" onclick="deleteIcon()">削除</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    let activeRef = null;
+    let dragType = null;
+    let selectedDateKey = "";
+    const START_HOUR = 9;
+
+    const staffNames = ["Manager", "Stylist A", "Stylist B", "Stylist C", "Stylist D", "Stylist E", "Stylist F"];
+    const guestNames = ["佐藤 芽衣 様", "鈴木 一郎 様", "田中 結衣 様", "高橋 健太 様", "伊藤 陽子 様", "渡辺 翔太 様"];
+    const menus = ["カット＆カラー", "パーマ", "縮毛矯正", "ヘッドスパ", "トリートメント", "メンズカット"];
+
+    let fullData = JSON.parse(localStorage.getItem('indexHair_v32_Portfolio')) || {};
+
+    function initData() {
+        const now = new Date();
+        for(let i=0; i<7; i++) {
+            const d = new Date(); d.setDate(now.getDate() + i);
+            const key = formatDate(d);
+            if (!fullData[key]) {
+                fullData[key] = staffNames.map((name, idx) => {
+                    const isOff = (idx > 0 && (i + idx) % 5 === 0);
+                    let reservations = [];
+                    if (!isOff) {
+                        const breakHour = 12 + Math.floor(Math.random() * 3);
+                        reservations.push({ id: 'res-b'+Math.random(), type: 'blue', name: '休憩', menu: '外出', left: (breakHour - START_HOUR) * 120, width: 120, confirmed: true });
+                        const resCount = 2 + Math.floor(Math.random() * 2);
+                        for(let j=0; j<resCount; j++) {
+                            const h = 9 + (j * 4);
+                            if(h >= breakHour && h < breakHour + 2) continue;
+                            reservations.push({ id: 'res-'+Math.random(), type: Math.random() > 0.4 ? 'assigned' : 'yellow', name: guestNames[Math.floor(Math.random()*guestNames.length)], menu: menus[Math.floor(Math.random()*menus.length)], left: (h - START_HOUR) * 120, width: 120, confirmed: Math.random() > 0.6 });
+                        }
+                    }
+                    return { id: 's-'+Date.now()+'-'+idx, name: name, isOff: isOff, reservations: reservations };
+                });
+            }
+        }
+        selectedDateKey = formatDate(now);
+    }
+
+    function renderTimeline() {
+        const grid = document.getElementById('timeline-grid');
+        grid.innerHTML = `<div class="staff-name-cell" style="background:#f8f8f8; font-size:11px; color:#999; cursor:default;">STAFF / OPERATIONS</div>`;
+        for(let i=START_HOUR; i<=20; i++) grid.innerHTML += `<div class="time-header-cell">${i}:00</div>`;
+
+        const dayData = fullData[selectedDateKey];
+        dayData.forEach((staff) => {
+            const nameCell = document.createElement('div');
+            nameCell.className = 'staff-name-cell';
+            nameCell.draggable = true;
+            nameCell.id = staff.id;
+            // スタッフ並び替え用ドラッグイベント
+            nameCell.ondragstart = (e) => dragStaffStart(e, staff.id);
+            nameCell.ondragover = (e) => { e.preventDefault(); nameCell.classList.add('drag-over-staff'); };
+            nameCell.ondragleave = () => nameCell.classList.remove('drag-over-staff');
+            nameCell.ondrop = (e) => { nameCell.classList.remove('drag-over-staff'); handleStaffDrop(e, staff.id); };
+
+            nameCell.innerHTML = `
+                <div class="staff-handle">⠿</div>
+                <div style="font-size:15px;">${staff.name}</div>
+                <div class="staff-ops">
+                    <button class="op-btn" onclick="event.stopPropagation(); editStaffName('${staff.id}')">✎</button>
+                    <button class="op-btn" onclick="event.stopPropagation(); deleteStaff('${staff.id}')">🗑</button>
+                </div>
+                <button onclick="event.stopPropagation(); toggleOffDay('${staff.id}')" style="font-size:10px; margin-top:10px; cursor:pointer; background:${staff.isOff?'#d9534f':'#eee'}; border:none; border-radius:4px; padding:3px 8px; color:${staff.isOff?'white':'#666'}">
+                    ${staff.isOff ? '本日公休' : '出勤中'}
+                </button>
+            `;
+
+            const slots = document.createElement('div');
+            slots.className = `slots-container ${staff.isOff ? 'is-off' : ''}`;
+            if (staff.isOff) {
+                slots.innerHTML = `<div class="off-label">OFF DAY</div>`;
+            } else {
+                slots.ondragover = (e) => { e.preventDefault(); slots.classList.add('drag-over'); };
+                slots.ondragleave = () => { slots.classList.remove('drag-over'); };
+                slots.ondrop = (e) => { slots.classList.remove('drag-over'); handleDrop(e, staff.id); };
+                slots.innerHTML = staff.reservations.map(res => {
+                    const h = Math.floor(START_HOUR + res.left / 120);
+                    const m = (res.left % 120 === 60) ? "30" : "00";
+                    return `
+                        <div class="slot ${res.type} ${res.confirmed ? 'confirmed' : ''}" id="${res.id}" style="left:${res.left}px; width:${res.width}px;" 
+                             draggable="${!res.confirmed}" ondragstart="dragIcon(event)" onclick="showDetail('${staff.id}', '${res.id}')">
+                            <div class="slot-tag">${res.confirmed ? '固定済み' : (res.type==='assigned'?'指名':'フリー')}</div>
+                            <div class="slot-time">${h}:${m}〜</div>
+                            <div class="slot-name">${res.name}</div>
+                            <div class="slot-menu">${res.menu}</div>
+                        </div>
+                    `;
+                }).join('');
+            }
+            grid.appendChild(nameCell);
+            grid.appendChild(slots);
+        });
+    }
+
+    // --- スタッフ並び替えロジック ---
+    function dragStaffStart(ev, staffId) {
+        ev.dataTransfer.setData("mode", "staff-reorder");
+        ev.dataTransfer.setData("staffId", staffId);
+        ev.target.style.opacity = "0.4";
+    }
+
+    function handleStaffDrop(ev, targetStaffId) {
+        ev.preventDefault();
+        const mode = ev.dataTransfer.getData("mode");
+        if (mode !== "staff-reorder") return;
+
+        const draggedStaffId = ev.dataTransfer.getData("staffId");
+        if (draggedStaffId === targetStaffId) { renderTimeline(); return; }
+
+        const dayData = fullData[selectedDateKey];
+        const dragIndex = dayData.findIndex(s => s.id === draggedStaffId);
+        const targetIndex = dayData.findIndex(s => s.id === targetStaffId);
+
+        // 配列内での入れ替え
+        const [removed] = dayData.splice(dragIndex, 1);
+        dayData.splice(targetIndex, 0, removed);
+
+        saveAndRender();
+    }
+
+    // --- 既存のドラッグ＆ドロップ（予約用） ---
+    function dragMaster(ev, type) { dragType = type; ev.dataTransfer.setData("mode", "create"); }
+    function dragIcon(ev) { ev.dataTransfer.setData("mode", "move"); ev.dataTransfer.setData("text", ev.target.id); }
+
+    function handleDrop(ev, targetStaffId) {
+        ev.preventDefault();
+        const mode = ev.dataTransfer.getData("mode");
+        if (mode === "staff-reorder") return; // スタッフ移動中に予約エリアに落ちた場合は無視
+
+        const rect = ev.currentTarget.getBoundingClientRect();
+        const x = ev.clientX - rect.left;
+        const staff = fullData[selectedDateKey].find(s => s.id == targetStaffId);
+
+        if (mode === "create") {
+            const defName = (dragType === 'blue') ? '休憩' : (dragType === 'green' ? '練習' : '新規予約');
+            staff.reservations.push({ id: 'r'+Date.now(), type: dragType, name: defName, menu: '', left: Math.floor(x/60)*60, width: 120, confirmed: false });
+        } else if (mode === "move") {
+            const resId = ev.dataTransfer.getData("text");
+            let foundRes = null;
+            fullData[selectedDateKey].forEach(s => {
+                const idx = s.reservations.findIndex(r => r.id === resId);
+                if (idx > -1 && !s.reservations[idx].confirmed) foundRes = s.reservations.splice(idx, 1)[0];
+            });
+            if (foundRes) { foundRes.left = Math.floor(x/60)*60; staff.reservations.push(foundRes); }
+        }
+        saveAndRender();
+    }
+
+    // --- 管理関数 ---
+    function toggleConfirm() { activeRef.r.confirmed = !activeRef.r.confirmed; saveAndRender(); }
+    function addStaff() { const n = prompt("スタッフ名:"); if(n) { fullData[selectedDateKey].push({id:'s-'+Date.now(), name:n, isOff:false, reservations:[]}); saveAndRender(); } }
+    function editStaffName(sid) { const s = fullData[selectedDateKey].find(x=>x.id==sid); const n = prompt("名前変更:", s.name); if(n) { s.name=n; saveAndRender(); } }
+    function deleteStaff(sid) { if(confirm("削除しますか？")) { fullData[selectedDateKey] = fullData[selectedDateKey].filter(x=>x.id!=sid); saveAndRender(); } }
+    function toggleOffDay(sid) { const s = fullData[selectedDateKey].find(x=>x.id==sid); s.isOff = !s.isOff; saveAndRender(); }
+    function showDetail(sid, rid) {
+        const s = fullData[selectedDateKey].find(x => x.id == sid);
+        const r = s.reservations.find(x => x.id == rid);
+        activeRef = { s, r };
+        document.getElementById('edit-type').value = r.type;
+        document.getElementById('edit-name').value = r.name;
+        document.getElementById('edit-menu').value = r.menu;
+        const btn = document.getElementById('confirm-btn');
+        btn.classList.toggle('active', r.confirmed);
+        btn.innerText = r.confirmed ? '✓ 固定済み (解除)' : '✓ 予約を確定する';
+        document.getElementById('overlay').style.display = 'block';
+    }
+    function applyChanges() {
+        activeRef.r.type = document.getElementById('edit-type').value;
+        activeRef.r.name = document.getElementById('edit-name').value;
+        activeRef.r.menu = document.getElementById('edit-menu').value;
+        saveAndRender(); closeModal();
+    }
+    function deleteIcon() { if(confirm("削除しますか？")) { activeRef.s.reservations = activeRef.s.reservations.filter(x=>x.id!=activeRef.r.id); saveAndRender(); closeModal(); } }
+    function saveAndRender() { localStorage.setItem('indexHair_v32_Portfolio', JSON.stringify(fullData)); renderTimeline(); }
+    function closeModal() { document.getElementById('overlay').style.display = 'none'; }
+    function formatDate(date) { return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`; }
+
+    initData();
+    renderTimeline();
+    setInterval(() => {
+        const now = new Date();
+        document.getElementById('current-date').innerText = formatDate(now).replace(/-/g, '.') + " (JST)";
+        document.getElementById('current-time').innerText = now.toLocaleTimeString();
+    }, 1000);
+
+    const weekCont = document.getElementById('calendar-week');
+    Object.keys(fullData).sort().forEach(key => {
+        const btn = document.createElement('button');
+        btn.className = `day-btn ${key === selectedDateKey ? 'active' : ''}`;
+        btn.innerText = key.split('-').slice(1).join('/');
+        btn.onclick = () => { selectedDateKey = key; document.querySelectorAll('.day-btn').forEach(b => b.classList.remove('active')); btn.classList.add('active'); renderTimeline(); };
+        weekCont.appendChild(btn);
+    });
+</script>
+</body>
+</html>
