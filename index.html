@@ -9,7 +9,7 @@
             --bg-color: #fdfaf9;
             --accent: #d89689;
             --assigned: #b56e61;    /* 指名客：茶 */
-            --confirmed: #ff8c00;   /* 確定：オレンジ */
+            --confirmed: #ff8c00;    /* 確定：オレンジ */
             --free: #f4d36f;        /* フリー：黄 */
             --break: #5c85d6;       /* 休憩：青 */
             --memo: #5cb85c;        /* 練習：緑 */
@@ -34,7 +34,7 @@
         .timeline-grid { display: grid; grid-template-columns: 160px repeat(12, var(--slot-width)); min-width: 1600px; position: relative; }
         .time-header-cell { background: #f8f8f8; border-bottom: 1px solid #ddd; padding: 12px 0; text-align: center; font-size: 12px; font-weight: bold; position: sticky; top: 0; z-index: 20; }
         
-        /* スタッフ名セル（ここをドラッグできるように変更） */
+        /* スタッフ名セル */
         .staff-name-cell { 
             padding: 10px; background: #fff; border-bottom: 1px solid #eee; border-right: 2px solid var(--accent); 
             font-weight: bold; position: sticky; left: 0; z-index: 15; display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -130,9 +130,19 @@
 </div>
 
 <script>
+    // --- 【修正】URLから日付を受け取るための関数 ---
+    function getDisplayDate() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const dateParam = urlParams.get('date');
+        if (dateParam) return dateParam; // URLに ?date=YYYY-MM-DD があればそれを使う
+        
+        const now = new Date(); // なければ今日の日付
+        return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+    }
+
     let activeRef = null;
     let dragType = null;
-    let selectedDateKey = "";
+    let selectedDateKey = getDisplayDate(); // 【修正】初期値を関数から取得
     const START_HOUR = 9;
 
     const staffNames = ["Manager", "Stylist A", "Stylist B", "Stylist C", "Stylist D", "Stylist E", "Stylist F"];
@@ -143,6 +153,7 @@
 
     function initData() {
         const now = new Date();
+        // 7日分のデータを作成
         for(let i=0; i<7; i++) {
             const d = new Date(); d.setDate(now.getDate() + i);
             const key = formatDate(d);
@@ -164,7 +175,7 @@
                 });
             }
         }
-        selectedDateKey = formatDate(now);
+        // 【修正】ここで selectedDateKey を formatDate(now) で上書きしていたのを削除しました
     }
 
     function renderTimeline() {
@@ -172,13 +183,17 @@
         grid.innerHTML = `<div class="staff-name-cell" style="background:#f8f8f8; font-size:11px; color:#999; cursor:default;">STAFF / OPERATIONS</div>`;
         for(let i=START_HOUR; i<=20; i++) grid.innerHTML += `<div class="time-header-cell">${i}:00</div>`;
 
+        // もしURLの日付が fullData に存在しない場合（過去や遠い未来）は初期化
+        if (!fullData[selectedDateKey]) {
+             fullData[selectedDateKey] = staffNames.map((name, idx) => ({ id: 's-'+Date.now()+'-'+idx, name: name, isOff: false, reservations: [] }));
+        }
+
         const dayData = fullData[selectedDateKey];
         dayData.forEach((staff) => {
             const nameCell = document.createElement('div');
             nameCell.className = 'staff-name-cell';
             nameCell.draggable = true;
             nameCell.id = staff.id;
-            // スタッフ並び替え用ドラッグイベント
             nameCell.ondragstart = (e) => dragStaffStart(e, staff.id);
             nameCell.ondragover = (e) => { e.preventDefault(); nameCell.classList.add('drag-over-staff'); };
             nameCell.ondragleave = () => nameCell.classList.remove('drag-over-staff');
@@ -223,7 +238,6 @@
         });
     }
 
-    // --- スタッフ並び替えロジック ---
     function dragStaffStart(ev, staffId) {
         ev.dataTransfer.setData("mode", "staff-reorder");
         ev.dataTransfer.setData("staffId", staffId);
@@ -234,34 +248,26 @@
         ev.preventDefault();
         const mode = ev.dataTransfer.getData("mode");
         if (mode !== "staff-reorder") return;
-
         const draggedStaffId = ev.dataTransfer.getData("staffId");
         if (draggedStaffId === targetStaffId) { renderTimeline(); return; }
-
         const dayData = fullData[selectedDateKey];
         const dragIndex = dayData.findIndex(s => s.id === draggedStaffId);
         const targetIndex = dayData.findIndex(s => s.id === targetStaffId);
-
-        // 配列内での入れ替え
         const [removed] = dayData.splice(dragIndex, 1);
         dayData.splice(targetIndex, 0, removed);
-
         saveAndRender();
     }
 
-    // --- 既存のドラッグ＆ドロップ（予約用） ---
     function dragMaster(ev, type) { dragType = type; ev.dataTransfer.setData("mode", "create"); }
     function dragIcon(ev) { ev.dataTransfer.setData("mode", "move"); ev.dataTransfer.setData("text", ev.target.id); }
 
     function handleDrop(ev, targetStaffId) {
         ev.preventDefault();
         const mode = ev.dataTransfer.getData("mode");
-        if (mode === "staff-reorder") return; // スタッフ移動中に予約エリアに落ちた場合は無視
-
+        if (mode === "staff-reorder") return;
         const rect = ev.currentTarget.getBoundingClientRect();
         const x = ev.clientX - rect.left;
         const staff = fullData[selectedDateKey].find(s => s.id == targetStaffId);
-
         if (mode === "create") {
             const defName = (dragType === 'blue') ? '休憩' : (dragType === 'green' ? '練習' : '新規予約');
             staff.reservations.push({ id: 'r'+Date.now(), type: dragType, name: defName, menu: '', left: Math.floor(x/60)*60, width: 120, confirmed: false });
@@ -277,7 +283,6 @@
         saveAndRender();
     }
 
-    // --- 管理関数 ---
     function toggleConfirm() { activeRef.r.confirmed = !activeRef.r.confirmed; saveAndRender(); }
     function addStaff() { const n = prompt("スタッフ名:"); if(n) { fullData[selectedDateKey].push({id:'s-'+Date.now(), name:n, isOff:false, reservations:[]}); saveAndRender(); } }
     function editStaffName(sid) { const s = fullData[selectedDateKey].find(x=>x.id==sid); const n = prompt("名前変更:", s.name); if(n) { s.name=n; saveAndRender(); } }
@@ -308,12 +313,14 @@
 
     initData();
     renderTimeline();
+
     setInterval(() => {
         const now = new Date();
         document.getElementById('current-date').innerText = formatDate(now).replace(/-/g, '.') + " (JST)";
         document.getElementById('current-time').innerText = now.toLocaleTimeString();
     }, 1000);
 
+    // カレンダー週ボタンの生成
     const weekCont = document.getElementById('calendar-week');
     Object.keys(fullData).sort().forEach(key => {
         const btn = document.createElement('button');
